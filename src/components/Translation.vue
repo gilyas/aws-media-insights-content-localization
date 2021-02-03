@@ -1,26 +1,13 @@
 <template>
   <div>
-    <div v-if="noTranslation === true">
-      No translation found for this asset
+    <div v-if="noTranslation === true">No translation found for this asset</div>
+    <div v-if="isBusy" class="wrapper">
+      <b-spinner variant="secondary" label="Loading..." />
+      <p class="text-muted">(Loading...)</p>
     </div>
-    <div
-      v-if="isBusy"
-      class="wrapper"
-    >
-      <b-spinner
-        variant="secondary"
-        label="Loading..."
-      />
-      <p class="text-muted">
-        (Loading...)
-      </p>
-    </div>
-    <div
-      v-else-if="noTranslation === false"
-      class="wrapper"
-    >
-      <label>Source Language:</label> {{ source_language }}<br>
-      <label>Target Language:</label> {{ target_language }}<br>
+    <div v-else-if="noTranslation === false" class="wrapper">
+      <label>Source Language:</label> {{ source_language }}<br />
+      <label>Target Language:</label> {{ target_language }}<br />
       {{ translated_text }}
     </div>
   </div>
@@ -811,7 +798,7 @@ export default {
         console.log(error)
       }
     },
-    disableUpstreamStages()  {
+    disableUpstreamStages: async function()  {
       // This function disables all the operators in stages above TranslateStage2,
       // so all that's left are the operators that update vtt and srt files.
       let data = {
@@ -820,8 +807,10 @@ export default {
       }
       data["Input"] = {
         "AssetId": this.asset_id
-      };
+      }
+      
       let response = await this.$Amplify.API.get(apiName, path, apiParams);
+
       if (!response) {
         this.showElasticSearchAlert = true
       }
