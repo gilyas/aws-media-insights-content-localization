@@ -14,7 +14,7 @@ dataplane_bucket = os.environ['DataplaneBucket']
 s3 = boto3.client('s3')
 
 # These names are the lowercase version of OPERATOR_NAME defined in /source/operators/operator-library.yaml
-supported_operators = ["textdetection", "mediainfo", "transcribeaudio", "transcribevideo", "translate", "genericdatalookup", "labeldetection", "celebrityrecognition", "face_search", "contentmoderation", "facedetection", "key_phrases", "entities", "webcaptions", "shotdetection", "technicalcuedetection"]
+supported_operators = ["textdetection", "mediainfo", "transcribeaudio", "transcribevideo", "translate", "genericdatalookup", "labeldetection", "celebrityrecognition", "facesearch", "contentmoderation", "facedetection", "key_phrases", "entities", "webcaptions", "shotdetection", "technicalcuedetection"]
 
 def normalize_confidence(confidence_value):  
     converted = float(confidence_value) * 100
@@ -624,6 +624,112 @@ def process_shot_detection(asset, workflow, results):
     bulk_index(es, asset, "shots", extracted_items)
 
 
+def process_technical_cue_detection(asset, workflow, results):
+    metadata = json.loads(results)
+    es = connect_es(es_endpoint)
+    extracted_items = []
+    # We can tell if json results are paged by checking to see if the json results are an instance of the list type.
+    if isinstance(metadata, list):
+        # handle paged results
+        for page in metadata:
+            if "Segments" in page:
+                for item in page["Segments"]:
+                    try:
+                        item["Operator"] = "technical_cue_detection"
+                        item["Workflow"] = workflow
+                        if "TechnicalCueSegment" in item:
+                            item["Confidence"] = item["TechnicalCueSegment"]["Confidence"]
+                            item["Type"] = item["TechnicalCueSegment"]["Type"]
+
+                            del item["TechnicalCueSegment"]
+
+                            item["StartTimestamp"] = item["StartTimestampMillis"]
+                            item["EndTimestamp"] = item["EndTimestampMillis"]
+
+                            del item["StartTimestampMillis"]
+                            del item["EndTimestampMillis"]
+                        extracted_items.append(item)
+                    except KeyError as e:
+                        print("KeyError: " + str(e))
+                        print("Item: " + json.dumps(item))
+    else:
+        # these results are not paged
+        if "Segments" in metadata:
+            for item in metadata["Segments"]:
+                try:
+                    item["Operator"] = "technical_cue_detection"
+                    item["Workflow"] = workflow
+                    if "TechnicalCueSegment" in item:
+                        item["Confidence"] = item["TechnicalCueSegment"]["Confidence"]
+                        item["Type"] = item["TechnicalCueSegment"]["Type"]
+
+                        del item["TechnicalCueSegment"]
+
+                        item["StartTimestamp"] = item["StartTimestampMillis"]
+                        item["EndTimestamp"] = item["EndTimestampMillis"]
+
+                        del item["StartTimestampMillis"]
+                        del item["EndTimestampMillis"]
+                    extracted_items.append(item)
+                except KeyError as e:
+                    print("KeyError: " + str(e))
+                    print("Item: " + json.dumps(item))
+    bulk_index(es, asset, "technical_cues", extracted_items)
+
+
+def process_shot_detection(asset, workflow, results):
+    metadata = json.loads(results)
+    es = connect_es(es_endpoint)
+    extracted_items = []
+    # We can tell if json results are paged by checking to see if the json results are an instance of the list type.
+    if isinstance(metadata, list):
+        # handle paged results
+        for page in metadata:
+            if "Segments" in page:
+                for item in page["Segments"]:
+                    try:
+                        item["Operator"] = "shot_detection"
+                        item["Workflow"] = workflow
+                        if "ShotSegment" in item:
+                            item["Confidence"] = item["ShotSegment"]["Confidence"]
+                            item["Index"] = item["ShotSegment"]["Index"]
+
+                            del item["ShotSegment"]
+
+                            item["StartTimestamp"] = item["StartTimestampMillis"]
+                            item["EndTimestamp"] = item["EndTimestampMillis"]
+
+                            del item["StartTimestampMillis"]
+                            del item["EndTimestampMillis"]
+                        extracted_items.append(item)
+                    except KeyError as e:
+                        print("KeyError: " + str(e))
+                        print("Item: " + json.dumps(item))
+    else:
+        # these results are not paged
+        if "Segments" in metadata:
+            for item in metadata["Segments"]:
+                try:
+                    item["Operator"] = "shot_detection"
+                    item["Workflow"] = workflow
+                    if "ShotSegment" in item:
+                        item["Confidence"] = item["ShotSegment"]["Confidence"]
+                        item["Index"] = item["ShotSegment"]["Index"]
+
+                        del item["ShotSegment"]
+
+                        item["StartTimestamp"] = item["StartTimestampMillis"]
+                        item["EndTimestamp"] = item["EndTimestampMillis"]
+
+                        del item["StartTimestampMillis"]
+                        del item["EndTimestampMillis"]
+                    extracted_items.append(item)
+                except KeyError as e:
+                    print("KeyError: " + str(e))
+                    print("Item: " + json.dumps(item))
+    bulk_index(es, asset, "shots", extracted_items)
+
+
 def process_translate(asset, workflow, results):
     metadata = json.loads(results)
 
@@ -632,14 +738,6 @@ def process_translate(asset, workflow, results):
     es = connect_es(es_endpoint)
     index_document(es, asset, "translation", translation)
 
-def process_webcaptions(asset, workflow, results, language_code):
-    metadata = json.loads(results)
-    metadata_type = "webcaptions"+"_"+language_code
-
-    webcaptions = metadata
-    webcaptions["workflow"] = workflow
-    es = connect_es(es_endpoint)
-    index_document(es, asset, metadata_type, webcaptions)
 
 def process_transcribe(asset, workflow, results, type):
     metadata = json.loads(results)
@@ -651,7 +749,6 @@ def process_transcribe(asset, workflow, results, type):
     index_name = type+"transcript"
     es = connect_es(es_endpoint)
     index_document(es, asset, index_name, transcript)
-
 
     transcribe_items = []
 
@@ -693,7 +790,6 @@ def process_entities(asset, workflow, results):
 
         entity["Workflow"] = workflow
         entity["Operator"] = "entities"
-        
         del entity["Type"]
         del entity["Text"]
         del entity["Score"]
@@ -905,12 +1001,6 @@ def lambda_handler(event, context):
                 if metadata["Status"] == "Success":
                     print("Retrieved {operator} metadata from s3, inserting into Elasticsearch".format(operator=operator))
                     operator = operator.lower()
-                    # webcaptions operators are processed the same, but they have a language extension
-                    # in the operator name.  Strip that off now.  Any language is supported for search
-                    if operator.startswith("webcaptions_"):
-                        print("Got webcaptions operator {}".format(operator))
-                        (operator, language_code) = operator.split("_")
-
                     # Route event to process method based on the operator type in the event.
                     # These names are the lowercase version of OPERATOR_NAME defined in /source/operators/operator-library.yaml
                     if operator in supported_operators:
@@ -920,8 +1010,6 @@ def lambda_handler(event, context):
                             process_transcribe(asset_id, workflow, metadata["Results"], "audio")
                         if operator == "translate":
                             process_translate(asset_id, workflow, metadata["Results"])
-                        if operator == "webcaptions":
-                            process_webcaptions(asset_id, workflow, metadata["Results"], language_code)
                         if operator == "mediainfo":
                             process_mediainfo(asset_id, workflow, metadata["Results"])
                         if operator == "genericdatalookup":

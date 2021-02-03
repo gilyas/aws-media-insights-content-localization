@@ -3,15 +3,6 @@
     <div v-if="noTranslation === true">
       No translation found for this asset
     </div>
-    <b-alert
-      v-model="showTerminologyNotification"
-      :variant="terminologyNotificationStatus"
-      dismissible
-      fade
-    >
-      {{ terminologyNotificationMessage }}
-    </b-alert>
-    <!-- show spinner while busy loading -->
     <div
       v-if="isBusy"
       class="wrapper"
@@ -24,286 +15,25 @@
         (Loading...)
       </p>
     </div>
-    <!-- show table if not busy loading and translation data exists -->
     <div
       v-else-if="noTranslation === false"
       class="wrapper"
     >
-      <!-- show radio buttons for each available translation language -->
-      <b-form-group>
-        <b-form-radio-group
-          v-model="selected_lang_code"
-          :options="translationsCollection"
-          @change="getWebCaptions"
-        ></b-form-radio-group>
-      </b-form-group>
-      <!-- show translation text when language has been selected -->
-      <div v-if="selected_lang_code !== ''" id="event-line-editor" class="event-line-editor">
-        <b-table
-          ref="selectableTable"
-          selectable
-          select-mode="single"
-          thead-class="hidden_header"
-          fixed responsive="sm"
-          :items="webCaptions"
-          :fields="webCaptions_fields"
-        >
-          <!-- adjust column width for captions -->
-          <template v-slot:table-colgroup="scope">
-            <col
-              v-for="field in scope.fields"
-              :key="field.key"
-              :style="{ width: field.key === 'caption' ? '80%' : '20%' }"
-            >
-          </template>
-          <!-- reformat timestamp to hh:mm:ss and -->
-          <!-- disable timestamp edits if workflow status is not Complete -->
-          <template v-slot:cell(timeslot)="data">
-            <b-form-input :disabled="workflow_status !== 'Complete'" class="compact-height start-time-field " :value="toHHMMSS(data.item.start)" @change="new_time => changeStartTime(new_time, data.index)" />
-            <b-form-input :disabled="workflow_status !== 'Complete'" class="compact-height stop-time-field " :value="toHHMMSS(data.item.end)" @change="new_time => changeEndTime(new_time, data.index)" />
-          </template>
-          <template v-slot:cell(caption)="data">
-            <b-container class="p-0">
-              <b-row no-gutters>
-                <b-col cols="10">
-                  <!-- The state on this text area will show a red alert icon if the user forgets to enter any text. Otherwise we set the state to null so no validity indicator is shown. -->
-                  <b-form-textarea
-                    :id="'caption' + data.index"
-                    :ref="'caption' + data.index"
-                    class="custom-text-field .form-control-sm"
-                    rows="2"
-                    placeholder="Type translation here"
-                    :value="data.item.caption"
-                    :dir="text_direction"
-                    :disabled="workflow_status !== 'Complete'"
-                    :state="(data.item.caption.length > 0) ? null : false"
-                    @change="new_caption => changeCaption(new_caption, data.index)"
-                    @click="captionClickHandler(data.index)"
-                  />
-                </b-col>
-                <b-col>
-                  <span style="position:absolute; top: 0px">
-                    <b-button v-if="workflow_status === 'Complete'" size="sm" variant="link" @click="delete_row(data.index)">
-                      <b-icon icon="x-circle" color="lightgrey"></b-icon>
-                    </b-button>
-                  </span>
-                  <span style="position:absolute; bottom: 0px">
-                    <b-button v-if="workflow_status === 'Complete'" size="sm" variant="link" @click="add_row(data.index)">
-                      <b-icon icon="plus-square" color="lightgrey"></b-icon>
-                    </b-button>
-                  </span>
-                </b-col>
-              </b-row>
-            </b-container>
-          </template>
-        </b-table>
-      </div>
-      <br>
-      <!-- this is the download button -->
-      <b-dropdown id="download-dropdown" text="Download VTT/SRT" class="mb-2" size="sm" dropup no-caret>
-        <template slot="button-content">
-          <b-icon icon="download" color="white"></b-icon> Download
-        </template>
-        <b-dropdown-item :href="vtt_url">
-          Download VTT
-        </b-dropdown-item>
-        <b-dropdown-item :href="srt_url">
-          Download SRT
-        </b-dropdown-item>
-        <b-dropdown-item v-if="pollyaudio_url" :href="pollyaudio_url" target="_blank" download>
-          Download Audio
-        </b-dropdown-item>
-        <b-dropdown-item v-else disabled>
-          Download Audio (language not supported)
-        </b-dropdown-item>
-      </b-dropdown>&nbsp;
-      <!-- this is the save vocabulary button -->
-      <b-button id="saveTerminology" v-b-tooltip.hover title="Save terminology will open a window where you can create or modify custom terminologies for AWS Translate" size="sm" class="mb-2" @click="showTerminologyConfirmation()">
-        <b-icon icon="card-text" color="white"></b-icon>
-        Save terminology
-      </b-button>&nbsp;
-      <!-- this is the save edits button for when workflow complete -->
-      <b-button v-if="workflow_status === 'Complete' || workflow_status === 'Error'" id="editCaptions" size="sm" class="mb-2" @click="saveCaptions()">
-        <b-icon icon="play" color="white"></b-icon>
-        Save edits
-      </b-button>
-      <!-- this is the save edits button for when workflow running -->
-      <b-button v-else id="editCaptionsDisabled" size="sm" disabled class="mb-2">
-        <b-icon icon="arrow-clockwise" animation="spin" color="white"></b-icon>
-        Saving edits
-      </b-button>
-      <br>
-      <b-modal ref="delete-terminology-modal" ok-title="Confirm" ok-variant="danger" title="Delete Terminology?" @ok="deleteTerminologyRequest(customTerminologyName=customTerminologySelected)">
-        <p>Are you sure you want to permanently delete the custom terminology <b>{{ customTerminologySelected }}</b>?</p>
-      </b-modal>
-      <b-modal ref="terminology-modal" size="lg" title="Save Terminology?" :ok-disabled="validTerminologyName === false || (customTerminologySelected === '' && customTerminologyCreateNew === '') || customTerminologyUnion.length === 0 || validCSV === false" ok-title="Save" @ok="saveTerminology()" @cancel="customTerminologySelected=''; customTerminologySaved=[]; customTerminologyUnsaved=[]">
-        <div v-if="customTerminologyList.length > 0">
-          Existing terminologies for {{ translateLanguages.filter(x => x.value === selected_lang_code).map(x => x.text)[0] }}:
-        </div>
-        <b-form-group v-if="customTerminologyList.length > 0">
-          <b-form-radio-group
-            id="custom-terminology-selection"
-            v-model="customTerminologySelected"
-            name="custom-terminology-list"
-            :options="customTerminologyList"
-            text-field="name_and_status"
-            value-field="name"
-            disabled-field="notEnabled"
-            stacked
-          >
-          </b-form-radio-group>
-        </b-form-group>
-        <div>
-          Save as:
-        </div>
-        <!-- The state on this text area will show a red alert icon if
-        the user enters an invalid custom terminology name. Otherwise we
-        set the state to null so no validity indicator is shown. -->
-        <b-form-input v-model="customTerminologyCreateNew" size="sm" placeholder="Enter new terminology name" :state="validTerminologyName ? null : false"></b-form-input>
-
-        <div v-if="customTerminologyList.length > 0 && customTerminologySelected !== ''">
-          Delete terminology: <b>{{ customTerminologySelected }}</b>&nbsp;
-          <b-button v-b-tooltip.hover.right size="sm" title="Delete selected terminology" variant="danger" @click="deleteTerminology">
-            Delete
-          </b-button>
-        </div>
-        <hr>
-        <div v-if="customTerminologyUnsaved.length !== 0">
-          Draft terminology (click to edit):
-          <div v-if="customTerminologySelected != ''" class="text-info" style="font-size: 80%">
-            Rows shown in blue are from terminology, <b>{{ customTerminologySelected }}.</b>
-          </div>
-        </div>
-        <b-table
-          :items="customTerminologyUnion"
-          :fields="customTerminologyFields"
-          selectable
-          select-mode="single"
-          fixed responsive="sm"
-          bordered
-          small
-        >
-          <!-- Here we define the cell contents for the terminology table: -->
-          <template v-slot:cell()="{ item, index, field: { key } }">
-            <!-- The v-if/else here is used to show the add / delete row buttons
-            only in the right-most column. -->
-            <div v-if="key === customTerminologyLastTableField">
-              <b-row no-gutters>
-                <b-col cols="9">
-                  <div v-if="index < customTerminologyUnsaved.length">
-                    <!-- We use null in state to avoid showing a green check mark when field is valid -->
-                    <b-form-input v-model="item[key]" class="custom-text-field" placeholder="(required)" :state="item[key] !== '' && item[key] !== undefined ? null : false" />
-                  </div>
-                  <div v-else>
-                    <b-form-input v-model="item[key]" class="custom-text-field text-info" />
-                  </div>
-                </b-col>
-                <b-col nopadding cols="1">
-                  <span style="position:absolute; top: 0px">
-                    <b-button v-b-tooltip.hover.right size="sm" style="display: flex;" variant="link" title="Remove row" @click="delete_terminology_row(index)">
-                      <b-icon font-scale=".9" icon="x-circle" color="lightgrey"></b-icon>
-                    </b-button>
-                  </span>
-                  <span style="position:absolute; bottom: 0px">
-                    <b-button v-b-tooltip.hover.right size="sm" style="display: flex;" variant="link" title="Add row" @click="add_terminology_row(index)">
-                      <b-icon font-scale=".9" icon="plus-square" color="lightgrey"></b-icon>
-                    </b-button>
-                  </span>
-                </b-col>
-              </b-row>
-            </div>
-            <div v-else>
-              <div v-if="index < customTerminologyUnsaved.length">
-                <!-- We use null in state to avoid showing a green check mark when field is valid -->
-                <b-form-input v-model="item[key]" class="custom-text-field" placeholder="(required)" :state="item[key] !== '' && item[key] !== undefined ? null : false" />
-              </div>
-              <div v-else>
-                <b-form-input v-model="item[key]" class="custom-text-field text-info" />
-              </div>
-            </div>
-          </template>
-          <!-- Here we show buttons to add / remove languages from custom terminology: -->
-          <template v-slot:table-caption>
-            <span style="position:absolute; right: 10px">
-<!--
-Uncomment the following buttons to get options for adding or removing languages to the terminology table:
--->
-<!--              <b-button v-if="customTerminologySelected !== ''" v-b-tooltip.hover.top title="Add a new language" variant="outline-secondary" class="btn-xs" @click="add_language()">Add Language</b-button>&nbsp;-->
-<!--              <b-button v-if="customTerminologySelected !== ''" v-b-tooltip.hover.top title="Remove a language" variant="outline-secondary" class="btn-xs" @click="remove_language()">Remove Language</b-button>-->
-            </span>
-          </template>
-        </b-table>
-        <div v-if="validTerminologyName === false" style="color:red">
-          Invalid terminology name. Valid characters are a-z, A-Z, and 0-9. Max length is 200.
-        </div>
-        <div v-else-if="customTerminologySelected === '' && customTerminologyCreateNew === ''" style="color:red">
-          Specify a terminology name.<br>
-        </div>
-        <div v-else-if="validCSV === false" style="color:red">
-          Custom terminology must not contain any empty fields.<br>
-        </div>
-      </b-modal>
-      <b-modal ref="save-modal" title="Save Confirmation" ok-title="Confirm" @ok="saveCaptions()">
-        <p>Saving will overwrite the existing {{ selected_lang }} translation. Are you sure?</p>
-      </b-modal>
-      <b-modal ref="add-language-modal" title="Add Language" ok-title="Save" :ok-disabled="newLanguageCode === ''" @ok="add_language_request()">
-        <p>Select language to add:</p>
-        <b-form-select
-            v-model="newLanguageCode"
-            placeholder="language code"
-            :options="translateLanguages"
-            size="sm"
-        />
-      </b-modal>
-      <b-modal ref="remove-language-modal" title="Remove Language" ok-title="Remove" :ok-disabled="removeLanguageCode === ''" @ok="remove_language_request()">
-        <p>Select language to remove:</p>
-        <b-form-group>
-          <b-form-radio-group v-if="customTerminologySelected === ''"
-            v-model="removeLanguageCode"
-            :options="translateLanguages.filter(langItem => translationsCollection.map(x => x.value).includes(langItem.value))"
-          ></b-form-radio-group>
-          <b-form-radio-group v-else
-            v-model="removeLanguageCode"
-            :options="alphabetized_language_collection.map(x => x.value)"
-          ></b-form-radio-group>
-        </b-form-group>
-      </b-modal>
-      <div v-if="webCaptions.length > 0 && workflow_status !== 'Complete' && workflow_status !== 'Error' && workflow_status !== 'Waiting'" style="color:red">
-        Editing is disabled until workflow completes.
-      </div>
+      <label>Source Language:</label> {{ source_language }}<br>
+      <label>Target Language:</label> {{ target_language }}<br>
+      {{ translated_text }}
     </div>
   </div>
 </template>
 
 <script>
-import {mapState} from "vuex";
-
 export default {
   name: "Translation",
   data() {
     return {
-      text: "",
-      vttcaptions: [
-        {
-          src: "",
-          lang: "",
-          label: ""
-        }
-      ],
-      srtcaptions: [
-        {
-          src: "",
-          lang: "",
-          label: ""
-        }
-      ],
-      pollyaudiotranscripts: [
-        {
-          src: "",
-          lang: "",
-          label: ""
-        }
-      ],
+      translated_text: "",
+      source_language: "",
+      target_language: "",
       isBusy: false,
       operator: "translation",
       noTranslation: false,
@@ -544,19 +274,10 @@ export default {
   },
   deactivated: function () {
     console.log('deactivated component:', this.operator)
-    this.selected_lang_code = ""
-    clearInterval(this.workflow_status_polling)
   },
   activated: function () {
     console.log('activated component:', this.operator);
-    this.getVttCaptions();
-    this.getSrtCaptions();
-    this.getPollyAudioTranscripts()
-    this.isBusy = true;
-    this.handleVideoPlay();
-    this.handleVideoSeek();
-    this.getWorkflowId();
-    this.pollWorkflowStatus();
+    this.fetchAssetData();
   },
   beforeDestroy: function () {
     clearInterval(this.workflow_status_polling)
@@ -1100,31 +821,9 @@ export default {
       data["Input"] = {
         "AssetId": this.asset_id
       };
-      let workflow = this.workflow_definition
-      let stage_name = workflow.StartAt
-      let stage = workflow["Stages"][stage_name]
-      let end = false
-      // This loop starts at the first stage and
-      // goes until the staged named "End"
-      while (end == false) {
-        // If the current stage is End then end the loop.
-        if ("End" in stage && stage["End"] == true){
-          end = true
-        }
-        // If the current stage is CaptionFileStage2 then end the loop.
-        else if (stage_name == "CaptionFileStage2") {
-          end = true
-        }
-        // For all other stages disable all the operators in the stage
-        else {
-          // Disable all the operators in the stage
-          for (const operator in data["Configuration"][stage_name]){
-            data["Configuration"][stage_name][operator]["Enabled"] = false
-          }
-          // Now look at the next stage in the workflow
-          stage_name = stage["Next"]
-          stage = workflow["Stages"][stage_name]
-        }
+      let response = await this.$Amplify.API.get(apiName, path, apiParams);
+      if (!response) {
+        this.showElasticSearchAlert = true
       }
 
       return data
@@ -1466,110 +1165,9 @@ export default {
         for (let i = 0; i < this.customTerminologySaved.length; i++) {
           delete this.customTerminologySaved[i][this.removeLanguageCode]
         }
-        // This pop and push seems to be necessary in order to force the terminology table to refresh
-        const terminology_row = this.customTerminologySaved.pop()
-        this.customTerminologySaved.push(terminology_row)
+        this.isBusy = false
       }
-      this.translationsCollection = this.translationsCollection.filter(x => x.value !== this.removeLanguageCode)
-      // reset the language code used in the form on remove-language-modal
-      this.removeLanguageCode=""
-    },
-    add_terminology_row(index) {
-      // The index provided is the index into the concatenated unsaved and saved terminologies.
-      // Unsaved vocab will always be listed first, so we're converting the index here so that
-      // we can splice appropriately in the unsaved or saved terminology.
-      if (index < this.customTerminologyUnsaved.length) {
-        this.customTerminologyUnsaved.splice(index+1, 0, this.getEmptyTerminologyRecord())
-      } else {
-        this.customTerminologyUnsaved.splice(index-this.customTerminologyUnsaved.length, 0, this.getEmptyTerminologyRecord())
-      }
-      console.log("added " + JSON.stringify(this.getEmptyTerminologyRecord()))
-    },
-    delete_terminology_row(index) {
-      console.log(index)
-      console.log(this.customTerminologyUnsaved.length)
-      // The index provided is the index into the concatenated unsaved and saved terminologies
-      // Unsaved terminologies will always be listed first, so we convert the index as follows so that
-      // we can splice appropriately in the unsaved or saved terminology.
-      if (index < this.customTerminologyUnsaved.length) {
-        this.customTerminologyUnsaved.splice(index, 1)
-      } else {
-        const index_into_saved_terminology = index - this.customTerminologyUnsaved.length
-        this.customTerminologySaved.splice(index_into_saved_terminology, 1)
-      }
-      // if (this.customTerminologyUnion.length === 0){
-      //   this.customTerminologyUnsaved.push(this.emptyTerminologyRecord)
-      // }
-      console.log(this.customTerminologyUnsaved.length)
-      console.log(this.customTerminologyUnsaved)
-    },
-    pollWorkflowStatus() {
-      // Poll frequency in milliseconds
-      const poll_frequency = 5000;
-      clearInterval(this.workflow_status_polling)
-      this.workflow_status_polling = setInterval(() => {
-        this.getWorkflowStatus();
-      }, poll_frequency)
-    },
+    }
   }
 }
 </script>
-
-<style>
-  .start-time-field {
-    padding: 0 !important;
-    margin: 0 !important;
-    margin-bottom: 4px !important;
-    border: 0 !important;
-    height: auto;
-    background-color: white !important;
-  }
-  .stop-time-field {
-    padding: 0 !important;
-    margin: 0 !important;
-    border: 0 !important;
-    height: auto;
-    background-color: white !important;
-  }
-  .hidden_header {
-    display: none;
-  }
-  .event-line-editor {
-    overflow: scroll;
-    height: 500px;
-    border-top: 1px solid #e2e2e2;
-    border-bottom: 1px solid #e2e2e2;
-  }
-  /* these options needed for MacOS to make scrollbar visible when not in use */
-  .event-line-editor::-webkit-scrollbar {
-    -webkit-appearance: none;
-    width: 7px;
-  }
-  /* these options needed for MacOS to make scrollbar visible when not in use */
-  .event-line-editor::-webkit-scrollbar-thumb {
-    border-radius: 4px;
-    background-color: rgba(0, 0, 0, .5);
-    -webkit-box-shadow: 0 0 1px rgba(255, 255, 255, .5);
-  }
-  .custom-text-field {
-    background-color: white !important;
-    border: 0;
-  }
-  .highlightedBorder {
-    border-left: 1px solid #cc181e;
-    background-color: green;
-  }
-  tr.b-table-row-selected {
-    border-left: 1px solid #cc181e !important;
-  }
-  table.b-table-selectable > tbody > tr.b-table-row-selected > td {
-    background-color: white !important;
-  }
-  .btn-group-xs > .btn, .btn-xs {
-    padding: .25rem .4rem;
-    font-size: .875rem;
-    line-height: .5;
-    border-radius: .2rem;
-  }
-</style>
-

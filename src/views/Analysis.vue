@@ -78,10 +78,6 @@
                       @click="currentView = 'Transcript'"
                     />
                     <b-tab
-                      title="Subtitles"
-                      @click="currentView = 'Subtitles'"
-                    />
-                    <b-tab
                       title="Translation"
                       @click="currentView = 'Translation'"
                     />
@@ -117,7 +113,7 @@
             </div>
           </div>
           <div v-else>
-            <div v-if="videoOptions.sources[0].src === '' || (videoOptions.captions.length > 0 && videoOptions.captions.length !== num_caption_tracks)">
+            <div v-if="videoOptions.sources[0].src === ''">
               <Loading />
             </div>
             <div v-else>
@@ -161,12 +157,10 @@
   import MediaSummaryBox from '@/components/MediaSummaryBox.vue'
   import LineChart from '@/components/LineChart.vue'
   import { mapState } from 'vuex'
-  import Waveform from "../components/Waveform";
 
   export default {
     name: 'Home',
     components: {
-      Waveform,
       Header,
       ComponentLoadingError,
       MediaSummaryBox,
@@ -218,6 +212,22 @@
       ContentModeration: () => ({
         component: new Promise(function(resolve) {
           setTimeout(function() {
+            resolve(import('@/components/TechnicalCues.vue'));
+        }, 1000);
+        }),
+        loading: Loading,
+      }),
+      ShotDetection: () => ({
+        component: new Promise(function(resolve) {
+          setTimeout(function() {
+            resolve(import('@/components/ShotDetection.vue'));
+        }, 1000);
+        }),
+        loading: Loading,
+      }),
+      ContentModeration: () => ({
+        component: new Promise(function(resolve) {
+          setTimeout(function() {
             resolve(import('@/components/ContentModeration.vue'));
         }, 1000);
         }),
@@ -227,14 +237,6 @@
         component: new Promise(function(resolve) {
           setTimeout(function() {
             resolve(import('@/components/Transcript.vue'));
-        }, 1000);
-        }),
-        loading: Loading,
-      }),
-      Subtitles: () => ({
-        component: new Promise(function(resolve) {
-          setTimeout(function() {
-            resolve(import('@/components/Subtitles.vue'));
         }, 1000);
         }),
         loading: Loading,
@@ -284,7 +286,6 @@
         videoLoaded: false,
         supportedImageFormats: ["jpg", "jpeg", "tif", "tiff", "png", "gif"],
         mediaType: "",
-        num_caption_tracks: 0,
         videoOptions: {
           preload: 'auto',
           loop: true,
@@ -293,13 +294,6 @@
             {
               src: "",
               type: "video/mp4"
-            }
-          ],
-          captions: [
-            {
-              src: "",
-              lang: "",
-              label: ""
             }
           ]
         }
@@ -378,7 +372,6 @@
         let apiName = 'mieDataplaneApi';
         let path = 'metadata/' + asset_id;
         let requestOpts = {
-          headers: {'Content-Type': 'application/json'},
           response: true,
         };
         try {
@@ -422,7 +415,6 @@
         let path = 'download'
         let requestOpts = {
           headers: {
-            'Content-Type': 'application/json'
           },
           body: data,
           response: true,
@@ -437,8 +429,8 @@
           alert(error)
         }
       },
-      updateAssetId () {
-        this.$store.commit('updateAssetId', this.$route.params.asset_id);
+    updateAssetId () {
+      this.$store.commit('updateAssetId', this.$route.params.asset_id);
       }
     }
   }

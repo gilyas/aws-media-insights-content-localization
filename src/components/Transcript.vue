@@ -19,10 +19,6 @@
         <br>
       </div>
       {{ transcript }}
-      <br>
-      <b-button v-if="transcript.length > 0" id="downloadTranscript" size="sm" class="mb-2" @click="downloadTranscript()">
-        <b-icon icon="download" color="white"></b-icon> Download
-      </b-button>
     </div>
   </div>
 </template>
@@ -54,7 +50,7 @@ export default {
     this.fetchAssetData();
   },
   beforeDestroy: function () {
-    this.transcript = ''
+      this.transcript = ''
   },
   methods: {
     async fetchAssetData () {
@@ -76,29 +72,16 @@ export default {
           this.noTranscript = true
         }
         else {
-          this.noTranscript = false;
           for (let i = 0, len = data.length; i < len; i++) {
             if ('transcript' in data[i]._source) {
               this.transcript = this.transcript.concat(data[i]._source.transcript + " ")
               this.noTranscript = false;
             }
-            console.log("data")
-            console.log(data)
           }
         }
         this.isBusy = false
       }
-    },
-    downloadTranscript() {
-      const blob = new Blob([this.transcript], {type: 'text/plain', endings:'native'});
-      const e = document.createEvent('MouseEvents'),
-          a = document.createElement('a');
-      a.download = "transcript.txt";
-      a.href = window.URL.createObjectURL(blob);
-      a.dataset.downloadurl = ['text/json', a.download, a.href].join(':');
-      e.initEvent('click', true, false, window, 0, 0, 0, 0, 0, false, false, false, false, 0, null);
-      a.dispatchEvent(e);
-    },
+    }
   }
 }
 </script>
