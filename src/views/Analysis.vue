@@ -118,7 +118,10 @@
             </div>
             <div v-else>
               <VideoPlayer :options="videoOptions" />
-              <div v-if="currentView === 'ShotDetection'">
+              <div v-if="currentView === 'Transcript' || currentView === 'Subtitles' || currentView === 'Translation' || currentView === 'KeyPhrases' || currentView === 'Entities'">
+                <Waveform />
+              </div>
+              <div v-else-if="currentView === 'ShotDetection'">
                 <br>
               </div>
               <div v-else-if="currentView === 'TechnicalCues'">
@@ -191,6 +194,22 @@
         loading: Loading,
       }),
       TechnicalCues: () => ({
+        component: new Promise(function(resolve) {
+          setTimeout(function() {
+            resolve(import('@/components/TechnicalCues.vue'));
+        }, 1000);
+        }),
+        loading: Loading,
+      }),
+      ShotDetection: () => ({
+        component: new Promise(function(resolve) {
+          setTimeout(function() {
+            resolve(import('@/components/ShotDetection.vue'));
+        }, 1000);
+        }),
+        loading: Loading,
+      }),
+      ContentModeration: () => ({
         component: new Promise(function(resolve) {
           setTimeout(function() {
             resolve(import('@/components/TechnicalCues.vue'));
@@ -287,6 +306,67 @@
           this.getAssetMetadata();
       },
     methods: {
+      async getVttCaptions() {
+
+        let asset_id = this.$route.params.asset_id;
+        let apiName = 'mieDataplaneApi';
+        let path = 'metadata/' + asset_id + '/WebToVTTCaptions';
+        let requestOpts = {
+          response: true,
+        };
+
+        if (this.mediaType !== "video") {
+          return;
+        }
+
+        try {
+          let response = await this.$Amplify.API.get(apiName, path, requestOpts);
+
+          let captions_collection = [];
+
+          if (response.data.results) {
+            this.num_caption_tracks = response.data.results.CaptionsCollection.length;
+
+            for (const item of response.data.results.CaptionsCollection) {
+    
+              // TODO: map the language code to a language label
+
+              const bucket = item.Results.S3Bucket;
+              const key = item.Results.S3Key;
+              let body_string = JSON.stringify({"S3Bucket": bucket, "S3Key": key})
+              let body = {"S3Bucket": bucket, "S3Key": key}
+              // get URL to captions file in S3
+
+              apiName = 'mieDataplaneApi';
+              path = 'download';
+              requestOpts = {
+                response: true,
+                headers: {'Content-Type': 'application/json'},
+                body: body
+              };
+
+              try {
+                let res = await this.$Amplify.API.post(apiName, path, requestOpts);
+                if (res.data) {
+                  captions_collection.push({'src': res.data, 'lang': item.LanguageCode, 'label': item.LanguageCode});
+              }
+                
+              } catch (error) {
+                alert(error)
+                console.log(error)
+              }   
+            }
+
+            this.videoOptions.captions = captions_collection;
+          } else {
+            this.videoOptions.captions = []
+          }
+          
+        } catch (error) {
+          alert(error)
+          console.log(error)
+        }
+      },
       async getAssetMetadata () {
         let asset_id = this.$route.params.asset_id;
         let apiName = 'mieDataplaneApi';
@@ -306,6 +386,7 @@
           }
           this.filename = filename;
           this.getVideoUrl()
+          this.getVttCaptions()
         } catch (error) {
           alert(error)
           console.log(error)

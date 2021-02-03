@@ -2,6 +2,10 @@
   <div>
     <div class="headerTextBackground">
       <Header :is-collection-active="true" />
+      <b-modal ref="delete-confirmation-modal" ok-title="Confirm" ok-variant="danger" title="Delete Asset?" @ok="deleteAsset">
+        <p>Are you sure you want to permanently delete asset ID <b>{{ delete_asset_id }}</b>?</p>
+      </b-modal>
+
       <b-container fluid>
         <b-alert
           v-model="showElasticSearchAlert"
@@ -117,7 +121,7 @@
                     v-if="noAssets"
                   >
                     <p>
-                      Looks like no assets have been uploaded! Try uploading <a href="upload">here</a>.
+                      Looks like no assets have been uploaded! Try uploading <a href="upload">here</a>
                     </p>
                   </div>
                   <div
@@ -165,6 +169,7 @@
         showDataplaneAlert: false,
         showDeletedAlert: 0,
         noAssets: null,
+        delete_asset_id: "",
         currentPage: 1,
         perPage: 10,
         isBusy: false,
@@ -397,7 +402,7 @@
         let thumbnailS3Key = 'private/assets/' + assetId + '/' + filename.substring(0, filename.lastIndexOf(".")) + '_thumbnail.0000001.jpg';
         // If it's an image then Media Convert won't create a thumbnail.
         // In that case we use the uploaded image as the thumbnail.
-        let supported_image_types = [".jpg", ".jpeg", ".tif", ".tiff", ".png", ".apng", ".gif", ".bmp", ".s gvg"];
+        let supported_image_types = [".jpg", ".jpeg", ".tif", ".tiff", ".png", ".apng", ".gif", ".bmp", ".svg"];
         let media_type = filename.substring(filename.lastIndexOf(".")).toLowerCase();
         if (supported_image_types.includes(media_type)) {
           // use the uploaded image as a thumbnail

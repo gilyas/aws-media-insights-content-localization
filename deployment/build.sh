@@ -95,9 +95,8 @@ cp "$template_dir/aws-content-analysis.yaml" "$dist_dir/aws-content-analysis.tem
 cp "$template_dir/aws-content-analysis-elasticsearch.yaml" "$dist_dir/aws-content-analysis-elasticsearch.template"
 cp "$template_dir/aws-content-analysis-auth.yaml" "$dist_dir/aws-content-analysis-auth.template"
 cp "$template_dir/aws-content-analysis-web.yaml" "$dist_dir/aws-content-analysis-web.template"
-cp "$template_dir/aws-content-analysis-video-workflow.yaml" "$dist_dir/aws-content-analysis-video-workflow.template"
+cp "$template_dir/aws-vod-subtitles-video-workflow.yaml" "$dist_dir/aws-vod-subtitles-video-workflow.template"
 cp "$template_dir/aws-content-analysis-image-workflow.yaml" "$dist_dir/aws-content-analysis-image-workflow.template"
-
 cp "$template_dir/string.yaml" "$dist_dir/string.template"
 
 

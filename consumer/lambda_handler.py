@@ -14,10 +14,9 @@ dataplane_bucket = os.environ['DataplaneBucket']
 s3 = boto3.client('s3')
 
 # These names are the lowercase version of OPERATOR_NAME defined in /source/operators/operator-library.yaml
-supported_operators = ["textdetection", "mediainfo", "transcribeaudio", "transcribevideo", "translate", "genericdatalookup", "labeldetection", "celebrityrecognition", "facesearch", "contentmoderation", "facedetection", "key_phrases", "entities", "shotdetection", "technicalcuedetection"]
+supported_operators = ["textdetection", "mediainfo", "transcribeaudio", "transcribevideo", "translate", "genericdatalookup", "labeldetection", "celebrityrecognition", "facesearch", "contentmoderation", "facedetection", "key_phrases", "entities", "webcaptions", "shotdetection", "technicalcuedetection"]
 
-
-def normalize_confidence(confidence_value):
+def normalize_confidence(confidence_value):  
     converted = float(confidence_value) * 100
     return str(converted)
 
@@ -519,6 +518,111 @@ def process_label_detection(asset, workflow, results):
                     print("Item: " + json.dumps(item))
     bulk_index(es, asset, "labels", extracted_items)
 
+def process_technical_cue_detection(asset, workflow, results):
+    metadata = json.loads(results)
+    es = connect_es(es_endpoint)
+    extracted_items = []
+    # We can tell if json results are paged by checking to see if the json results are an instance of the list type.
+    if isinstance(metadata, list):
+        # handle paged results
+        for page in metadata:
+            if "Segments" in page:
+                for item in page["Segments"]:
+                    try:
+                        item["Operator"] = "technical_cue_detection"
+                        item["Workflow"] = workflow
+                        if "TechnicalCueSegment" in item:
+                            item["Confidence"] = item["TechnicalCueSegment"]["Confidence"]
+                            item["Type"] = item["TechnicalCueSegment"]["Type"]
+
+                            del item["TechnicalCueSegment"]
+
+                            item["StartTimestamp"] = item["StartTimestampMillis"]
+                            item["EndTimestamp"] = item["EndTimestampMillis"]
+
+                            del item["StartTimestampMillis"]
+                            del item["EndTimestampMillis"]
+                        extracted_items.append(item)
+                    except KeyError as e:
+                        print("KeyError: " + str(e))
+                        print("Item: " + json.dumps(item))
+    else:
+        # these results are not paged
+        if "Segments" in metadata:
+            for item in metadata["Segments"]:
+                try:
+                    item["Operator"] = "technical_cue_detection"
+                    item["Workflow"] = workflow
+                    if "TechnicalCueSegment" in item:
+                        item["Confidence"] = item["TechnicalCueSegment"]["Confidence"]
+                        item["Type"] = item["TechnicalCueSegment"]["Type"]
+
+                        del item["TechnicalCueSegment"]
+
+                        item["StartTimestamp"] = item["StartTimestampMillis"]
+                        item["EndTimestamp"] = item["EndTimestampMillis"]
+
+                        del item["StartTimestampMillis"]
+                        del item["EndTimestampMillis"]
+                    extracted_items.append(item)
+                except KeyError as e:
+                    print("KeyError: " + str(e))
+                    print("Item: " + json.dumps(item))
+    bulk_index(es, asset, "technical_cues", extracted_items)
+
+
+def process_shot_detection(asset, workflow, results):
+    metadata = json.loads(results)
+    es = connect_es(es_endpoint)
+    extracted_items = []
+    # We can tell if json results are paged by checking to see if the json results are an instance of the list type.
+    if isinstance(metadata, list):
+        # handle paged results
+        for page in metadata:
+            if "Segments" in page:
+                for item in page["Segments"]:
+                    try:
+                        item["Operator"] = "shot_detection"
+                        item["Workflow"] = workflow
+                        if "ShotSegment" in item:
+                            item["Confidence"] = item["ShotSegment"]["Confidence"]
+                            item["Index"] = item["ShotSegment"]["Index"]
+
+                            del item["ShotSegment"]
+
+                            item["StartTimestamp"] = item["StartTimestampMillis"]
+                            item["EndTimestamp"] = item["EndTimestampMillis"]
+
+                            del item["StartTimestampMillis"]
+                            del item["EndTimestampMillis"]
+                        extracted_items.append(item)
+                    except KeyError as e:
+                        print("KeyError: " + str(e))
+                        print("Item: " + json.dumps(item))
+    else:
+        # these results are not paged
+        if "Segments" in metadata:
+            for item in metadata["Segments"]:
+                try:
+                    item["Operator"] = "shot_detection"
+                    item["Workflow"] = workflow
+                    if "ShotSegment" in item:
+                        item["Confidence"] = item["ShotSegment"]["Confidence"]
+                        item["Index"] = item["ShotSegment"]["Index"]
+
+                        del item["ShotSegment"]
+
+                        item["StartTimestamp"] = item["StartTimestampMillis"]
+                        item["EndTimestamp"] = item["EndTimestampMillis"]
+
+                        del item["StartTimestampMillis"]
+                        del item["EndTimestampMillis"]
+                    extracted_items.append(item)
+                except KeyError as e:
+                    print("KeyError: " + str(e))
+                    print("Item: " + json.dumps(item))
+    bulk_index(es, asset, "shots", extracted_items)
+
 
 def process_technical_cue_detection(asset, workflow, results):
     metadata = json.loads(results)
@@ -686,7 +790,6 @@ def process_entities(asset, workflow, results):
 
         entity["Workflow"] = workflow
         entity["Operator"] = "entities"
-
         del entity["Type"]
         del entity["Text"]
         del entity["Score"]
@@ -919,7 +1022,7 @@ def lambda_handler(event, context):
                             process_content_moderation(asset_id, workflow, metadata["Results"])
                         if operator == "facedetection":
                             process_face_detection(asset_id, workflow, metadata["Results"])
-                        if operator == "facesearch":
+                        if operator == "face_search":
                             process_face_search(asset_id, workflow, metadata["Results"])
                         if operator == "entities":
                             process_entities(asset_id, workflow, metadata["Results"])
